@@ -1,0 +1,25 @@
+{
+  "name": "台中區 FAE 測試資產智慧管理",
+  "short_name": "FAE資產管理",
+  "description": "台中區 FAE 測試資產掃碼借還與分箱雙軌快盤雲端系統",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0c2340",
+  "theme_color": "#0c2340",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0c2340">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FAE資產管理">
+  <title>台中區 FAE 測試資產智慧管理</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div>
+        <h1 class="brand-title">台中區 FAE 測試資產智慧管理</h1>
+        <p id="sub-status" class="brand-sub">尚未連線雲端資料庫，請完成連線設定</p>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="refreshCloudData()" title="重新同步雲端資料">🔄 <span class="hide-mobile">同步</span></button>
+        <button class="icon-btn" onclick="openPairModal()" title="產生手機／另一台筆電快速配對 QR Code">📱 <span class="hide-mobile">配對手機</span></button>
+        <button class="icon-btn" onclick="openSettingsModal()" title="連線與 API 設定">⚙️ <span class="hide-mobile">設定</span></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-bar">
+    <div class="nav-inner">
+      <button class="nav-btn active" onclick="switchTab('dashboard')">📊 總覽快搜</button>
+      <button class="nav-btn" onclick="switchTab('loan')">🔄 掃碼借還</button>
+      <button class="nav-btn" onclick="switchTab('audit')">📦 分箱快盤</button>
+      <button class="nav-btn" onclick="switchTab('ai')">💬 AI與紀錄</button>
+    </div>
+  </nav>
+
+  <!-- Floating Scan Toast -->
+  <div id="scan-toast" class="toast hidden"></div>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+
+    <!-- TAB 1: 總覽與快搜 (筆電寬表 + 手機卡片自適應) -->
+    <section id="tab-dashboard">
+      <div class="kpi-grid">
+        <div class="kpi-card active-filter" id="kpi-all" onclick="setStatusQuickFilter('')">
+          <div class="kpi-label">納管應盤硬體</div>
+          <div class="kpi-val" id="stat-total" style="color:#0c2340;">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-instock" onclick="setStatusQuickFilter('在庫')">
+          <div class="kpi-label">在庫可用</div>
+          <div class="kpi-val" id="stat-instock" style="color:#0f766e;">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-internal" onclick="setStatusQuickFilter('同仁測試中')">
+          <div class="kpi-label">同仁測試中</div>
+          <div class="kpi-val" id="stat-internal" style="color:#d97706;">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-cust" onclick="setStatusQuickFilter('客戶借測中')">
+          <div class="kpi-label">客戶借測中</div>
+          <div class="kpi-val" id="stat-cust" style="color:#2563eb;">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-overdue" onclick="setStatusQuickFilter('OVERDUE90')">
+          <div class="kpi-label">逾 90 天預警</div>
+          <div class="kpi-val" id="stat-overdue" style="color:#dc2626;">--</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>🔍 即時資產查詢與一鍵借還</span>
+          <span id="filter-count" style="font-size:12px; color:#64748b; font-weight:600;">共 0 筆</span>
+        </div>
+        <div class="filter-bar">
+          <input type="search" id="search-kw" placeholder="搜尋料號 P/N、序號 S/N、FAEM 編號、保管人或客戶..." oninput="renderAssetCatalog()">
+          <select id="filter-box" onchange="renderAssetCatalog()">
+            <option value="">📦 全部儲位箱號</option>
+          </select>
+          <select id="filter-status" onchange="renderAssetCatalog()">
+            <option value="">📌 全部狀態（不含免盤線材）</option>
+            <option value="ALL_WITH_CABLE">包含線材全部顯示</option>
+            <option value="在庫">在庫</option>
+            <option value="同仁測試中">同仁測試中</option>
+            <option value="客戶借測中">客戶借測中</option>
+            <option value="盤虧待查">盤虧待查</option>
+            <option value="OVERDUE90">⚠️ 借測逾 90 天</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="resetCatalogFilters()">清除篩選</button>
+        </div>
+
+        <div class="asset-table-wrap">
+          <table class="asset-table">
+            <thead>
+              <tr>
+                <th>資產編號</th>
+                <th>料號 P/N &amp; 規格</th>
+                <th>序號 S/N</th>
+                <th>儲位</th>
+                <th>目前狀態 / 保管對象</th>
+                <th style="text-align:right;">快速操作</th>
+              </tr>
+            </thead>
+            <tbody id="catalog-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: 掃碼借還 -->
+    <section id="tab-loan" class="hidden">
+      <div class="narrow-center">
+        <div class="card">
+          <div class="mode-switch">
+            <button id="btn-mode-loan" class="mode-btn active-loan" onclick="setLoanMode('LOAN')">📤 借出 / 內部測試</button>
+            <button id="btn-mode-ret" class="mode-btn" onclick="setLoanMode('RETURN')">📥 歸還放回箱內</button>
+          </div>
+
+          <button id="btn-cam-loan" class="btn btn-outline" type="button" onclick="toggleScanner('qr-reader', onLoanScan, 'btn-cam-loan')">
+            📷 開啟手機／筆電相機掃描設備 QR 貼紙
+          </button>
+          <div id="qr-reader" class="qr-viewport"></div>
+
+          <label class="field-label">搜尋或掃入設備（支援外接條碼槍、輸入 Asset_ID / P/N / S/N）</label>
+          <input type="text" id="loan-asset-input" list="asset-datalist" placeholder="例如：FAEMRM001 或 EKI-7710G" oninput="previewSelectedAsset()">
+          <datalist id="asset-datalist"></datalist>
+          <div id="asset-preview" style="font-size:12px; color:#0f766e; margin-top:6px; font-weight:700;"></div>
+
+          <div id="loan-fields">
+            <label class="field-label">異動類別</label>
+            <select id="loan-type">
+              <option value="同仁借測">同仁內部測試使用</option>
+              <option value="客戶借測">客戶端借測</option>
+            </select>
+            <label class="field-label">經手 FAE 姓名（自動記憶於本機）</label>
+            <input type="text" id="loan-fae" placeholder="例如：Ulis / Key / Stan / Tim">
+            <label class="field-label">借用同仁或客戶名稱</label>
+            <input type="text" id="loan-borrower" placeholder="例如：Key 或 客戶A公司">
+            <label class="field-label">預計歸還日期（選填）</label>
+            <input type="date" id="loan-due">
+          </div>
+
+          <div id="return-fields" class="hidden">
+            <label class="field-label">放回儲位箱號</label>
+            <select id="return-box"></select>
+            <label class="field-label">歸還經手人</label>
+            <input type="text" id="return-fae" placeholder="例如：Ulis">
+          </div>
+
+          <label class="field-label">備註說明（選填）</label>
+          <input type="text" id="loan-note" placeholder="專案用途或設備狀況">
+
+          <button id="btn-submit-loan" class="btn btn-primary" style="margin-top:14px;" onclick="submitLoanForm()">
+            ✅ 確認送出並同步 Google 雲端主檔
+          </button>
+          <div id="loan-msg" class="status-msg hidden"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: 分箱雙軌快盤 (支援 90x45mm 標籤免關鏡頭連掃 + 嗶聲回饋) -->
+    <section id="tab-audit" class="hidden">
+      <div class="two-col">
+        <!-- 左欄：掃碼與拍照控制 -->
+        <div class="card">
+          <div class="card-title">
+            <span>📦 1. 選擇或掃描儲位箱卡</span>
+            <span style="font-size:11px; color:#0f766e;">🔊 支援連掃嗶聲提示</span>
+          </div>
+
+          <select id="audit-box" onchange="renderBoxChecklist()"></select>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+            <button id="btn-cam-audit" class="btn btn-outline" onclick="toggleScanner('audit-qr-reader', onAuditQrScan, 'btn-cam-audit')">
+              📷 軌道A：連掃盒外QR
+            </button>
+            <button class="btn btn-teal" onclick="document.getElementById('photo-input').click()">
+              📸 軌道B：AI拍整箱
+            </button>
+          </div>
+          <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="uploadBoxPhoto(this)">
+          <div id="audit-qr-reader" class="qr-viewport"></div>
+
+          <label class="field-label">⌨️ 條碼槍／鍵盤快速核對（刷入後自動按 Enter 核對下一件）</label>
+          <input type="text" id="wedge-scan-input" placeholder="游標停在此處即可用 USB 條碼槍連刷..." onkeydown="if(event.key==='Enter'){event.preventDefault(); handleWedgeInput(this);}">
+
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; margin-top:12px; color:#334155; cursor:pointer;">
+            <input type="checkbox" id="chk-update-wrong-box" style="width:auto;">
+            若掃到「放錯箱號」之設備，過帳時自動將其帳面儲位更新為本箱
+          </label>
+
+          <div id="audit-ai-msg" class="status-msg hidden"></div>
+        </div>
+
+        <!-- 右欄：本箱應盤清單與過帳 -->
+        <div class="card">
+          <div class="card-title">
+            <span id="box-progress-title">本箱應在庫清單</span>
+            <span id="box-progress-badge" class="badge b-loan">已核對 0 / 0</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div id="box-progress-fill" class="progress-bar-fill" style="width:0%;"></div>
+          </div>
+
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="selectAllCurrentBox(true)">全選本箱</button>
+            <button class="btn btn-ghost btn-sm" onclick="selectAllCurrentBox(false)">清除勾選</button>
+          </div>
+
+          <div id="box-checklist" style="max-height:460px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px;"></div>
+
+          <button id="btn-commit-audit" class="btn btn-primary" style="margin-top:14px;" onclick="commitMobileAudit()">
+            ✅ 一鍵將本箱已核對結果寫入雲端《03_歷季盤點明細》
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: AI 一句話記帳 & 近期異動紀錄 -->
+    <section id="tab-ai" class="hidden">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">
+            <span>✨ AI 自然語言一句話借還</span>
+            <span id="ai-badge" class="badge b-gray">檢查中</span>
+          </div>
+          <label class="field-label">直接輸入口語描述，Gemini AI 自動匹配設備料號並帶入借還單</label>
+          <textarea id="nlp-input" rows="4" placeholder="範例：借 Box 8 的 EKI-7710G 給客戶A公司測試，預計下個月底歸還 — Ulis"></textarea>
+          <button id="btn-nlp" class="btn btn-teal" style="margin-top:10px;" onclick="runNlpParse()">
+            🤖 AI 智慧解析並帶入借還單
+          </button>
+          <div id="nlp-msg" class="status-msg hidden"></div>
+
+          <hr style="border:none; border-top:1px solid #e2e8f0; margin:16px 0;">
+          <a id="sheet-direct-link" href="#" target="_blank" rel="noopener" class="btn btn-outline" style="text-decoration:none;">
+            📊 在新分頁開啟 Google 雲端試算表完整主檔
+          </a>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span>🕒 近期雲端借還異動紀錄（最新 25 筆）</span>
+          </div>
+          <div id="recent-loans-list" style="max-height:480px; overflow-y:auto;"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal 1: 連線設定 / 團隊通行碼驗證 -->
+  <div id="auth-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h2 style="margin:0 0 6px; font-size:18px; color:#0c2340;">🔐 連線台中區 FAE 雲端資產庫</h2>
+      <p style="margin:0 0 14px; font-size:12px; color:#64748b;">
+        所有資產清冊與 AI 金鑰皆安全保護於您的 Google 雲端試算表，本機連線驗證後會自動記憶設定。
+      </p>
+
+      <label class="field-label">1. Google Apps Script 雲端 API 網址（`/exec` 結尾）</label>
+      <input type="url" id="cfg-api-url" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+
+      <div id="pin-login-box">
+        <label class="field-label" id="cfg-pin-label">2. 團隊專屬通行碼（PIN）</label>
+        <input type="password" id="cfg-pin" placeholder="請輸入 4～12 碼團隊通行碼" onkeydown="if(event.key==='Enter') saveAndConnect()">
+      </div>
+
+      <label class="field-label">3. 您的姓名／英文名（預設帶入經手 FAE）</label>
+      <input type="text" id="cfg-fae-name" placeholder="例如：Ulis">
+
+      <details id="admin-extra-box" style="margin-top:12px; font-size:12px; color:#475569;">
+        <summary style="cursor:pointer; font-weight:700;">進階選填：設定免費版 Gemini API Key（啟用 AI 功能）</summary>
+        <label class="field-label">Google AI Studio Gemini API Key（安全儲存於 Google 雲端後端）</label>
+        <input type="password" id="cfg-gemini-key" placeholder="AIzaSy...（留空則維持原設定）">
+      </details>
+
+      <div id="auth-msg" class="status-msg hidden"></div>
+
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button id="btn-connect" class="btn btn-primary" onclick="saveAndConnect()">連線並驗證雲端主檔</button>
+        <button id="btn-close-auth" class="btn btn-ghost hidden" style="width:auto; white-space:nowrap;" onclick="closeAuthModal()">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: 手機／其他筆電一鍵配對 QR Code -->
+  <div id="pair-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closePairModal()">
+    <div class="modal-card" style="text-align:center;">
+      <h2 style="margin:0 0 6px; font-size:18px; color:#0c2340;">📱 手機／新筆電一鍵連線配對</h2>
+      <p style="margin:0 0 12px; font-size:12px; color:#64748b;">
+        直接拿手機相機掃描下方 QR Code，即可免打長網址開啟本系統，加入手機主畫面即可當成原生 App 使用！
+      </p>
+      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#b45309; font-weight:700; margin-bottom:10px; cursor:pointer;">
+        <input type="checkbox" id="chk-pair-with-pin" style="width:auto;" onchange="renderPairQr()">
+        同時在配對碼內帶入團隊通行碼（限現場面對面掃描）
+      </label>
+      <div id="pair-qr-box" style="display:flex; justify-content:center; margin:8px 0;"></div>
+      <input type="text" id="pair-url-text" readonly style="font-size:11px; text-align:center; background:#f8fafc; margin-top:8px;" onclick="this.select()">
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="btn btn-outline" onclick="copyPairLink()">📋 複製配對連結傳至 LINE / Teams</button>
+        <button class="btn btn-ghost" style="width:auto;" onclick="closePairModal()">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
