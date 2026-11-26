@@ -27,17 +27,18 @@
       <div class="header-actions">
         <button class="icon-btn" onclick="refreshCloudData()" title="重新同步雲端資料">🔄 <span class="hide-mobile">同步</span></button>
         <button class="icon-btn" onclick="openPairModal()" title="產生手機／另一台筆電快速配對 QR Code">📱 <span class="hide-mobile">配對手機</span></button>
-        <button class="icon-btn" onclick="openSettingsModal()" title="連線與 API 設定">⚙️ <span class="hide-mobile">設定</span></button>
+        <button class="icon-btn" onclick="openSettingsModal()" title="連線與密碼設定">⚙️ <span class="hide-mobile">設定</span></button>
       </div>
     </div>
   </header>
 
-  <!-- Navigation Tabs -->
+  <!-- Navigation Tabs (5 Tabs) -->
   <nav class="nav-bar">
     <div class="nav-inner">
       <button class="nav-btn active" onclick="switchTab('dashboard')">📊 總覽快搜</button>
       <button class="nav-btn" onclick="switchTab('loan')">🔄 掃碼借還</button>
       <button class="nav-btn" onclick="switchTab('audit')">📦 分箱快盤</button>
+      <button class="nav-btn" onclick="switchTab('manage')">🛠️ 庫存維護</button>
       <button class="nav-btn" onclick="switchTab('ai')">💬 AI與紀錄</button>
     </div>
   </nav>
@@ -45,10 +46,13 @@
   <!-- Floating Scan Toast -->
   <div id="scan-toast" class="toast hidden"></div>
 
+  <!-- Shared Datalist -->
+  <datalist id="asset-datalist"></datalist>
+
   <!-- Main Workspace -->
   <main class="workspace">
 
-    <!-- TAB 1: 總覽與快搜 (筆電寬表 + 手機卡片自適應) -->
+    <!-- TAB 1: 總覽與快搜 -->
     <section id="tab-dashboard">
       <div class="kpi-grid">
         <div class="kpi-card active-filter" id="kpi-all" onclick="setStatusQuickFilter('')">
@@ -75,8 +79,11 @@
 
       <div class="card">
         <div class="card-title">
-          <span>🔍 即時資產查詢與一鍵借還</span>
-          <span id="filter-count" style="font-size:12px; color:#64748b; font-weight:600;">共 0 筆</span>
+          <span>🔍 即時資產查詢、借還與單張標籤補印</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="filter-count" style="font-size:12px; color:#64748b; font-weight:600;">共 0 筆</span>
+            <button class="btn btn-primary btn-sm" onclick="switchTab('manage'); switchManageSubtab('add');">➕ 新增測試品入庫</button>
+          </div>
         </div>
         <div class="filter-bar">
           <input type="search" id="search-kw" placeholder="搜尋料號 P/N、序號 S/N、FAEM 編號、保管人或客戶..." oninput="renderAssetCatalog()">
@@ -129,7 +136,6 @@
 
           <label class="field-label">搜尋或掃入設備（支援外接條碼槍、輸入 Asset_ID / P/N / S/N）</label>
           <input type="text" id="loan-asset-input" list="asset-datalist" placeholder="例如：FAEMRM001 或 EKI-7710G" oninput="previewSelectedAsset()">
-          <datalist id="asset-datalist"></datalist>
           <div id="asset-preview" style="font-size:12px; color:#0f766e; margin-top:6px; font-weight:700;"></div>
 
           <div id="loan-fields">
@@ -164,17 +170,19 @@
       </div>
     </section>
 
-    <!-- TAB 3: 分箱雙軌快盤 (支援 90x45mm 標籤免關鏡頭連掃 + 嗶聲回饋) -->
+    <!-- TAB 3: 分箱雙軌快盤 -->
     <section id="tab-audit" class="hidden">
       <div class="two-col">
-        <!-- 左欄：掃碼與拍照控制 -->
         <div class="card">
           <div class="card-title">
             <span>📦 1. 選擇或掃描儲位箱卡</span>
             <span style="font-size:11px; color:#0f766e;">🔊 支援連掃嗶聲提示</span>
           </div>
 
-          <select id="audit-box" onchange="renderBoxChecklist()"></select>
+          <div style="display:flex; gap:8px;">
+            <select id="audit-box" onchange="renderBoxChecklist()"></select>
+            <button class="btn btn-ghost btn-sm" onclick="openBoxCardPrintCurrent()" title="列印此儲位箱 90x45mm 標籤">🖨️ 箱卡</button>
+          </div>
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
             <button id="btn-cam-audit" class="btn btn-outline" onclick="toggleScanner('audit-qr-reader', onAuditQrScan, 'btn-cam-audit')">
@@ -198,7 +206,6 @@
           <div id="audit-ai-msg" class="status-msg hidden"></div>
         </div>
 
-        <!-- 右欄：本箱應盤清單與過帳 -->
         <div class="card">
           <div class="card-title">
             <span id="box-progress-title">本箱應在庫清單</span>
@@ -222,7 +229,237 @@
       </div>
     </section>
 
-    <!-- TAB 4: AI 一句話記帳 & 近期異動紀錄 -->
+    <!-- TAB 4: 庫存維護 (v4.0 新增：新增入庫、主檔編修/RMA、除帳退庫/永久刪除、已除帳歷史區) -->
+    <section id="tab-manage" class="hidden">
+
+      <!-- 管理員權限狀態橫幅 -->
+      <div id="admin-status-bar" class="admin-bar admin-locked">
+        <span id="admin-status-text">🔒 一般同仁模式：可直接「➕ 新增測試品入庫」；若需「編修主檔／除帳退庫／永久刪除」請解鎖管理員權限。</span>
+        <div style="display:flex; gap:6px;">
+          <button id="btn-admin-unlock" class="btn btn-amber btn-sm" onclick="openAdminPinModal()">🛡️ 管理員解鎖 (Admin PIN)</button>
+          <button id="btn-admin-lock" class="btn btn-ghost btn-sm hidden" onclick="lockAdminSession()">🔒 鎖定管理權限</button>
+        </div>
+      </div>
+
+      <!-- 4 個子功能切換 -->
+      <div class="subtab-bar">
+        <button class="subtab-btn active" id="subbtn-add" onclick="switchManageSubtab('add')">➕ 新進測試品入庫</button>
+        <button class="subtab-btn" id="subbtn-edit" onclick="switchManageSubtab('edit')">✏️ 編修 / RMA換序號</button>
+        <button class="subtab-btn" id="subbtn-retire" onclick="switchManageSubtab('retire')">📦 除帳退庫 / 刪除</button>
+        <button class="subtab-btn" id="subbtn-archive" onclick="switchManageSubtab('archive')">🗂️ 已除帳歷史 (<span id="retired-count-chip">0</span>)</button>
+      </div>
+
+      <!-- 子頁 4-1: 新進測試品入庫 (免 Admin PIN，自動延續 FAEMRM/FAEMIO/FAEMSW 編號) -->
+      <div id="msub-add" class="narrow-center">
+        <div class="card">
+          <div class="card-title">
+            <span>➕ 新進測試品建檔入庫</span>
+            <span style="font-size:12px; color:#0f766e;">入庫後可即印 90×45mm QR 標籤</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+            <button id="btn-cam-newsn" class="btn btn-outline" type="button" onclick="toggleScanner('new-sn-reader', onNewSnBarcodeScan, 'btn-cam-newsn')">
+              📷 掃外盒 S/N 條碼
+            </button>
+            <button class="btn btn-teal" type="button" onclick="document.getElementById('new-box-photo').click()">
+              📸 AI 拍原廠外盒自動填單
+            </button>
+          </div>
+          <input type="file" id="new-box-photo" accept="image/*" capture="environment" class="hidden" onchange="uploadNewBoxSticker(this)">
+          <div id="new-sn-reader" class="qr-viewport"></div>
+
+          <div class="form-grid-2">
+            <div>
+              <label class="field-label">1. 產品分類（自動對應 FAEM* 前綴）*</label>
+              <select id="add-category" onchange="onAddCategoryChange()"></select>
+            </div>
+            <div>
+              <label class="field-label">2. 編號前綴系列（自動延續最大號）</label>
+              <select id="add-prefix" onchange="updateSuggestedAssetId()"></select>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div>
+              <label class="field-label">3. 資產唯一碼 Asset_ID（預設自動配號，亦可手改）</label>
+              <input type="text" id="add-asset-id" placeholder="自動配號" oninput="checkAssetIdCollision()">
+              <div id="add-id-hint" style="font-size:11px; color:#0f766e; margin-top:3px; font-weight:700;"></div>
+            </div>
+            <div>
+              <label class="field-label">4. 入庫儲位箱號 *</label>
+              <select id="add-box" onchange="toggleCustomNewBox()"></select>
+              <input type="text" id="add-custom-box" class="hidden" style="margin-top:6px;" placeholder="輸入新箱號，例如：Box-16">
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div>
+              <label class="field-label">5. 產品料號 P/N *</label>
+              <input type="text" id="add-pn" placeholder="例如：ADAM-6050-D 或 EKI-7710G">
+            </div>
+            <div>
+              <label class="field-label">6. 機身序號 S/N（線材可留空）</label>
+              <input type="text" id="add-sn" placeholder="例如：IAAB123456">
+            </div>
+          </div>
+
+          <label class="field-label">7. 規格說明 Description（選填）</label>
+          <input type="text" id="add-desc" placeholder="例如：18-ch Isolated Digital I/O Modbus TCP Module">
+
+          <div class="form-grid-2">
+            <div>
+              <label class="field-label">8. 入庫經手 FAE</label>
+              <input type="text" id="add-fae" placeholder="例如：Ulis">
+            </div>
+            <div>
+              <label class="field-label">9. 來源／技術備註（選填）</label>
+              <input type="text" id="add-memo" placeholder="例如：2026Q4 林口 PM 調撥樣品">
+            </div>
+          </div>
+
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; margin-top:12px; color:#334155; cursor:pointer;">
+            <input type="checkbox" id="chk-keep-model" style="width:auto;">
+            ⚡ 同型號多台連建模式（送出後保留分類、料號與規格，直接刷下一台 S/N）
+          </label>
+
+          <button id="btn-submit-add" class="btn btn-primary" style="margin-top:14px;" onclick="submitCreateAsset()">
+            ➕ 確認建檔入庫並產生 90×45mm 標籤
+          </button>
+          <div id="add-msg" class="status-msg hidden"></div>
+        </div>
+      </div>
+
+      <!-- 子頁 4-2: 資料編修 / RMA 換序號 (需 Admin PIN) -->
+      <div id="msub-edit" class="narrow-center hidden">
+        <div class="card">
+          <div class="card-title">
+            <span>✏️ 主檔資料編修 &amp; RMA 換貨序號變更</span>
+            <span class="badge b-loan">🛡️ 需管理員權限</span>
+          </div>
+
+          <label class="field-label">搜尋欲修改的設備（輸入 Asset_ID / P/N / S/N）</label>
+          <input type="text" id="edit-pick-input" list="asset-datalist" placeholder="選擇或輸入設備編號，例如：FAEMMO014" oninput="loadAssetForEdit()">
+
+          <div id="edit-form-body" class="hidden">
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-top:10px; font-size:12px;" id="edit-current-summary"></div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="field-label">產品料號 P/N *</label>
+                <input type="text" id="edit-pn">
+              </div>
+              <div>
+                <label class="field-label">機身序號 S/N（若變更將自動留存 RMA 換貨紀錄）</label>
+                <input type="text" id="edit-sn">
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="field-label">產品分類</label>
+                <select id="edit-category"></select>
+              </div>
+              <div>
+                <label class="field-label">常駐儲位箱號</label>
+                <select id="edit-box"></select>
+              </div>
+            </div>
+
+            <label class="field-label">規格說明 Description</label>
+            <input type="text" id="edit-desc">
+
+            <label class="field-label">設備技術備註</label>
+            <input type="text" id="edit-memo">
+
+            <label class="field-label">本次修改原因說明（選填，寫入異動紀錄）</label>
+            <input type="text" id="edit-reason" placeholder="例如：RMA 維修換回良品新序號">
+
+            <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+              <button id="btn-submit-edit" class="btn btn-primary" style="flex:2;" onclick="submitEditAsset()">💾 儲存主檔變更（需 Admin PIN）</button>
+              <button class="btn btn-outline" style="flex:1;" type="button" onclick="printCurrentEditedAsset()">🖨️ 補印 90×45 標籤</button>
+            </div>
+          </div>
+          <div id="edit-msg" class="status-msg hidden"></div>
+        </div>
+      </div>
+
+      <!-- 子頁 4-3: 正式除帳退庫 / 永久刪除 (需 Admin PIN) -->
+      <div id="msub-retire" class="narrow-center hidden">
+        <div class="card">
+          <div class="card-title">
+            <span>📦 測試品正式除帳／退庫歸檔</span>
+            <span class="badge b-loan">🛡️ 需管理員權限</span>
+          </div>
+          <p style="margin:0 0 10px; font-size:12px; color:#475569;">
+            推薦使用「正式除帳歸檔」：設備將自動從日常借還、快盤清單與季報應盤母數中排除，同時 <strong>100% 保留歷年借還與盤點軌跡</strong>供日後查核。
+          </p>
+
+          <label class="field-label">1. 搜尋欲除帳或刪除的設備</label>
+          <input type="text" id="retire-pick-input" list="asset-datalist" placeholder="輸入 Asset_ID / P/N / S/N..." oninput="loadAssetForRetire()">
+
+          <div id="retire-form-body" class="hidden">
+            <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px; margin-top:10px; font-size:13px;" id="retire-asset-summary"></div>
+
+            <label class="field-label">2. 選擇除帳歸檔狀態（4 種標準去向）*</label>
+            <select id="retire-status">
+              <option value="已歸還總部/PM">📤 已歸還總部/PM（借調期滿退回林口／PM）</option>
+              <option value="已移撥他區">🚚 已移撥他區（轉調北區／南區 FAE 團隊）</option>
+              <option value="客戶轉購除帳">💼 客戶轉購除帳（客戶借測後直接買斷／專案結案）</option>
+              <option value="故障報廢除帳">🔧 故障報廢除帳（硬體損壞無法修復報廢）</option>
+            </select>
+
+            <label class="field-label">3. 去向說明／接收窗口或單號備註 *</label>
+            <input type="text" id="retire-note" placeholder="例如：2026/11 退回林口 PM 王OO / 移撥台北區 FAE">
+
+            <button id="btn-submit-retire" class="btn btn-amber" style="margin-top:14px;" onclick="submitRetireAsset()">
+              📦 確認執行正式除帳歸檔（需 Admin PIN）
+            </button>
+
+            <!-- 進階輔助：建檔錯誤永久刪除 -->
+            <details class="danger-zone">
+              <summary style="cursor:pointer; font-size:13px; font-weight:800; color:#b91c1c;">
+                🗑️ 進階操作：建檔錯誤「永久刪除該列」（不保留主檔列）
+              </summary>
+              <p style="font-size:12px; color:#991b1b; margin:8px 0;">
+                僅限「剛新增打錯字或重複建檔」使用！外借中設備系統將強制禁止永久刪除。請在下方再次輸入設備編號以確認移除：
+              </p>
+              <input type="text" id="delete-confirm-id" placeholder="請完整輸入上方設備之 Asset_ID 以確認刪除">
+              <input type="text" id="delete-reason" style="margin-top:6px;" placeholder="刪除原因（例如：重複建檔移除）">
+              <button id="btn-submit-delete" class="btn btn-danger" style="margin-top:8px;" onclick="submitHardDeleteAsset()">
+                🗑️ 永久從主檔刪除此列（不可復原）
+              </button>
+            </details>
+          </div>
+          <div id="retire-msg" class="status-msg hidden"></div>
+        </div>
+      </div>
+
+      <!-- 子頁 4-4: 歷史已除帳歸檔專區 -->
+      <div id="msub-archive" class="hidden">
+        <div class="card">
+          <div class="card-title">
+            <span>🗂️ 歷史已除帳／退庫歸檔清冊（不計入應盤母數）</span>
+          </div>
+          <div class="asset-table-wrap">
+            <table class="asset-table">
+              <thead>
+                <tr>
+                  <th>資產編號</th>
+                  <th>料號 P/N &amp; 序號</th>
+                  <th>除帳狀態</th>
+                  <th>除帳日期 / 去向紀錄</th>
+                  <th style="text-align:right;">管理員操作</th>
+                </tr>
+              </thead>
+              <tbody id="retired-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 5: AI 一句話記帳 & 近期異動紀錄 -->
     <section id="tab-ai" class="hidden">
       <div class="two-col">
         <div class="card">
@@ -245,7 +482,7 @@
 
         <div class="card">
           <div class="card-title">
-            <span>🕒 近期雲端借還異動紀錄（最新 25 筆）</span>
+            <span>🕒 近期雲端借還與庫存異動紀錄（最新 30 筆）</span>
           </div>
           <div id="recent-loans-list" style="max-height:480px; overflow-y:auto;"></div>
         </div>
@@ -266,7 +503,7 @@
       <input type="url" id="cfg-api-url" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
 
       <div id="pin-login-box">
-        <label class="field-label" id="cfg-pin-label">2. 團隊專屬通行碼（PIN）</label>
+        <label class="field-label" id="cfg-pin-label">2. 團隊專屬通行碼（Team PIN）</label>
         <input type="password" id="cfg-pin" placeholder="請輸入 4～12 碼團隊通行碼" onkeydown="if(event.key==='Enter') saveAndConnect()">
       </div>
 
@@ -274,9 +511,13 @@
       <input type="text" id="cfg-fae-name" placeholder="例如：Ulis">
 
       <details id="admin-extra-box" style="margin-top:12px; font-size:12px; color:#475569;">
-        <summary style="cursor:pointer; font-weight:700;">進階選填：設定免費版 Gemini API Key（啟用 AI 功能）</summary>
-        <label class="field-label">Google AI Studio Gemini API Key（安全儲存於 Google 雲端後端）</label>
-        <input type="password" id="cfg-gemini-key" placeholder="AIzaSy...（留空則維持原設定）">
+        <summary style="cursor:pointer; font-weight:700;">進階管理設定（Gemini API Key ／ 變更密碼）</summary>
+        <label class="field-label">目前管理員密碼（若已設定 Admin PIN，修改下方設定需填寫）</label>
+        <input type="password" id="cfg-cur-admin-pin" placeholder="輸入目前 Admin PIN">
+        <label class="field-label">Google AI Studio Gemini API Key（留空則維持原設定）</label>
+        <input type="password" id="cfg-gemini-key" placeholder="AIzaSy...">
+        <label class="field-label">變更管理員密碼 New Admin PIN（留空則不變更）</label>
+        <input type="password" id="cfg-new-admin-pin" placeholder="若欲重設 Admin PIN 請輸入 4～12 碼">
       </details>
 
       <div id="auth-msg" class="status-msg hidden"></div>
@@ -288,7 +529,39 @@
     </div>
   </div>
 
-  <!-- Modal 2: 手機／其他筆電一鍵配對 QR Code -->
+  <!-- Modal 2: 管理員密碼 (Admin PIN) 解鎖 / 首次設定視窗 -->
+  <div id="admin-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeAdminPinModal()">
+    <div class="modal-card">
+      <h2 style="margin:0 0 6px; font-size:18px; color:#0c2340;" id="admin-modal-title">🛡️ 解鎖管理員專屬權限</h2>
+      <p style="margin:0 0 12px; font-size:12px; color:#64748b;" id="admin-modal-desc">
+        請輸入管理員密碼（Admin PIN）以執行主檔編修、RMA 序號更新、正式除帳或永久刪除。關閉瀏覽器分頁後將自動重新上鎖。
+      </p>
+      <label class="field-label" id="admin-pin-input-label">管理員密碼（Admin PIN）</label>
+      <input type="password" id="admin-pin-input" placeholder="請輸入 4～12 碼管理員密碼" onkeydown="if(event.key==='Enter') confirmAdminPinModal()">
+      <div id="admin-modal-msg" class="status-msg hidden"></div>
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button id="btn-confirm-admin" class="btn btn-amber" onclick="confirmAdminPinModal()">確認解鎖</button>
+        <button class="btn btn-ghost" style="width:auto;" onclick="closeAdminPinModal()">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: 90mm x 45mm 標籤預覽與單張即印視窗 -->
+  <div id="label-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeLabelModal()">
+    <div class="modal-card" style="text-align:center;">
+      <h2 style="margin:0 0 4px; font-size:18px; color:#0c2340;">🖨️ 90mm × 45mm 標籤機即印預覽</h2>
+      <p style="margin:0 0 8px; font-size:12px; color:#64748b;">
+        已鎖定 `90mm × 45mm` 滿版黑白規格，可直接選擇您的標籤機印出貼於外盒！
+      </p>
+      <div id="label-preview-container"></div>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="btn btn-primary" onclick="executePrint90x45()">🖨️ 連接標籤機立即列印 (90×45mm)</button>
+        <button class="btn btn-ghost" style="width:auto;" onclick="closeLabelModal()">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: 手機／其他筆電一鍵配對 QR Code -->
   <div id="pair-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closePairModal()">
     <div class="modal-card" style="text-align:center;">
       <h2 style="margin:0 0 6px; font-size:18px; color:#0c2340;">📱 手機／新筆電一鍵連線配對</h2>
@@ -297,7 +570,7 @@
       </p>
       <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#b45309; font-weight:700; margin-bottom:10px; cursor:pointer;">
         <input type="checkbox" id="chk-pair-with-pin" style="width:auto;" onchange="renderPairQr()">
-        同時在配對碼內帶入團隊通行碼（限現場面對面掃描）
+        同時在配對碼內帶入團隊通行碼（限現場面對面掃描，不含管理員密碼）
       </label>
       <div id="pair-qr-box" style="display:flex; justify-content:center; margin:8px 0;"></div>
       <input type="text" id="pair-url-text" readonly style="font-size:11px; text-align:center; background:#f8fafc; margin-top:8px;" onclick="this.select()">

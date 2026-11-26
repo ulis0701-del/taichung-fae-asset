@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fae-asset-pwa-v1';
+const CACHE_NAME = 'fae-asset-pwa-v4';
 const STATIC_ASSETS = [
   './',
   './index.html',
